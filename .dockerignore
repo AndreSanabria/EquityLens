@@ -1,0 +1,15 @@
+.git/
+.vs/
+**/bin/
+**/obj/
+**/TestResults/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.log
+src/EquityLens.Web/node_modules/
+src/EquityLens.Web/dist/
+src/EquityLens.Web/*.tsbuildinfo
+coverage/
+README.md
+docs/screenshots/
