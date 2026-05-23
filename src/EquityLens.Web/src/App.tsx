@@ -424,8 +424,8 @@ function App() {
                 </p>
                 <div className="risk-meter">
                   <span
-                    className={`risk-fill ${riskClass(dashboard.riskAnalysis.finalScore)}`}
-                    style={{ width: `${dashboard.riskAnalysis.finalScore}%` }}
+                    className="risk-mask"
+                    style={{ width: riskMaskWidth(dashboard.riskAnalysis.finalScore) }}
                   />
                 </div>
                 <div className="component-list">
@@ -442,8 +442,8 @@ function App() {
                           </span>
                           <div>
                             <span
-                              className={`risk-fill ${riskClass(score)}`}
-                              style={{ width: `${score}%` }}
+                              className="risk-mask"
+                              style={{ width: riskMaskWidth(score) }}
                             />
                           </div>
                           <strong>{score}</strong>
@@ -646,6 +646,10 @@ function riskClass(score: number) {
   }
 
   return 'very-high'
+}
+
+function riskMaskWidth(score: number) {
+  return `${Math.max(0, Math.min(100, 100 - score))}%`
 }
 
 function getErrorMessage(error: unknown) {

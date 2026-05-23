@@ -590,33 +590,28 @@ button:disabled {
 }
 
 .risk-meter {
-  background: #dce4e0;
+  background: linear-gradient(
+    90deg,
+    #2b7a63 0%,
+    #2b7a63 25%,
+    #e0b43f 25%,
+    #e0b43f 50%,
+    #cf4b3f 50%,
+    #cf4b3f 75%,
+    #9f241c 75%,
+    #9f241c 100%
+  );
   border-radius: 999px;
   height: 12px;
   margin-bottom: 18px;
   overflow: hidden;
 }
 
-.risk-meter span,
-.component-row div span {
+.risk-mask {
+  background: #dce4e0;
   display: block;
   height: 100%;
-}
-
-.risk-fill.low {
-  background: #2b7a63;
-}
-
-.risk-fill.moderate {
-  background: #e0b43f;
-}
-
-.risk-fill.high {
-  background: #cf4b3f;
-}
-
-.risk-fill.very-high {
-  background: #9f241c;
+  margin-left: auto;
 }
 
 .component-row {
@@ -636,10 +631,24 @@ button:disabled {
 }
 
 .component-row div {
-  background: #e1e8e5;
+  background: linear-gradient(
+    90deg,
+    #2b7a63 0%,
+    #2b7a63 25%,
+    #e0b43f 25%,
+    #e0b43f 50%,
+    #cf4b3f 50%,
+    #cf4b3f 75%,
+    #9f241c 75%,
+    #9f241c 100%
+  );
   border-radius: 999px;
   height: 8px;
   overflow: hidden;
+}
+
+.component-row div .risk-mask {
+  background: #e1e8e5;
 }
 
 .component-row strong {
