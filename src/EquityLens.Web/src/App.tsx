@@ -423,7 +423,10 @@ function App() {
                   earnings instability 15%, debt pressure 10%, and news risk 5%.
                 </p>
                 <div className="risk-meter">
-                  <span style={{ width: `${dashboard.riskAnalysis.finalScore}%` }} />
+                  <span
+                    className={`risk-fill ${riskClass(dashboard.riskAnalysis.finalScore)}`}
+                    style={{ width: `${dashboard.riskAnalysis.finalScore}%` }}
+                  />
                 </div>
                 <div className="component-list">
                   {riskComponents.map(({ label, key, weight, description }) => {
@@ -438,7 +441,10 @@ function App() {
                             <InfoTooltip text={`${detail?.explanation ?? description} Weight: ${formatWeight(detail?.weight, weight)}.`} />
                           </span>
                           <div>
-                            <span style={{ width: `${score}%` }} />
+                            <span
+                              className={`risk-fill ${riskClass(score)}`}
+                              style={{ width: `${score}%` }}
+                            />
                           </div>
                           <strong>{score}</strong>
                         </div>
