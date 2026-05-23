@@ -55,11 +55,11 @@ React dashboard
 - React
 - TypeScript
 - Vite
-- Recharts
 - xUnit
 - Docker Compose
 - SEC EDGAR APIs
-- Yahoo Finance chart/RSS endpoints for local market-data retrieval
+- Yahoo Finance chart/RSS endpoints for default local market-data retrieval
+- Optional Alpha Vantage market-data adapter
 
 ## Repository Structure
 
@@ -70,6 +70,7 @@ EquityLens.sln
 |   |   |-- Configuration
 |   |   |-- Controllers
 |   |   |-- Data
+|   |   |   `-- Migrations
 |   |   |-- DTOs
 |   |   |-- Models
 |   |   |-- Services
@@ -83,6 +84,8 @@ EquityLens.sln
 |-- docs
 |   |-- methodology.md
 |   `-- screenshots
+|-- scripts
+|   `-- start-local.ps1
 `-- docker-compose.yml
 ```
 
@@ -99,6 +102,7 @@ The API is organized around focused services rather than placing business logic 
 - `NewsRankingService` categorizes headlines and calculates relevance/news-risk scores.
 - `DashboardService` combines all sections into a single structured dashboard response.
 - `WatchlistService` and `ResearchSnapshotService` persist saved tickers, notes, and dashboard snapshots.
+- EF Core migrations manage the SQLite schema for watchlist items, snapshots, and API request logs.
 
 Controllers expose concise REST endpoints and delegate calculation, retrieval, and persistence work to the service layer.
 
@@ -154,7 +158,12 @@ EquityLens supports two provider modes:
 
 The default provider mode is `Live`.
 
-SEC requests require a descriptive contact string through `ApiProviderOptions__SecUserAgent`. For production market data, the Yahoo Finance adapter should be replaced with a licensed provider such as Alpha Vantage, Twelve Data, Finnhub, Polygon, or another contracted data source.
+Live market data is configured through `ApiProviderOptions__MarketDataProvider`.
+
+- `YahooFinance`: default local adapter for chart and RSS data.
+- `AlphaVantage`: optional adapter for daily adjusted prices and news sentiment when `ApiProviderOptions__AlphaVantageApiKey` is configured.
+
+SEC requests require a descriptive contact string through `ApiProviderOptions__SecUserAgent`. For production market data, the default Yahoo Finance adapter should be replaced with a licensed provider such as Alpha Vantage, Twelve Data, Finnhub, Polygon, or another contracted data source.
 
 ## API Surface
 
@@ -208,11 +217,19 @@ Requirements:
 - Node.js 20+
 - PowerShell on Windows
 
+One-command local startup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+The script builds the frontend, starts the API on `http://127.0.0.1:5077`, starts the web preview on `http://127.0.0.1:5173`, opens the dashboard, and writes process logs under `.logs/`.
+
 API:
 
 ```powershell
 dotnet restore
-$env:ApiProviderOptions__SecUserAgent="EquityLens contact@example.com"
+$env:ApiProviderOptions__SecUserAgent="EquityLens Research Dashboard contact@example.com"
 dotnet run --project .\src\EquityLens.Api --urls http://127.0.0.1:5077
 ```
 
@@ -243,6 +260,8 @@ docker compose up --build
 dotnet build .\EquityLens.sln
 dotnet test .\EquityLens.sln
 cd .\src\EquityLens.Web
+npm.cmd audit
+npm.cmd run lint
 npm.cmd run build
 ```
 
@@ -250,6 +269,7 @@ npm.cmd run build
 
 - The application organizes research data and does not recommend buying, selling, or holding a security.
 - Yahoo Finance chart/RSS endpoints are used for local market-data retrieval and should not be treated as a production data license.
+- Alpha Vantage support requires an API key and depends on the configured API plan's rate limits.
 - Market cap is shown as `N/A` in live mode unless a licensed quote/fundamentals provider is added.
 - SEC company facts can lag company events and depend on consistent XBRL tags across filings.
 - News relevance is rule-based and explainable, but it can still miss context that a human analyst would catch.

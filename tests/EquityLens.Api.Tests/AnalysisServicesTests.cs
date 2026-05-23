@@ -124,6 +124,38 @@ public class AnalysisServicesTests
     }
 
     [Fact]
+    public void BuildDirection_LabelsOperatingAndBalanceSheetChanges()
+    {
+        var service = new FinancialDirectionService();
+        var facts = new List<FinancialFact>
+        {
+            new() { MetricName = "Revenue", FiscalYear = 2023, Value = 100m },
+            new() { MetricName = "Revenue", FiscalYear = 2024, Value = 108m },
+            new() { MetricName = "NetIncome", FiscalYear = 2023, Value = 20m },
+            new() { MetricName = "NetIncome", FiscalYear = 2024, Value = 18m },
+            new() { MetricName = "Debt", FiscalYear = 2023, Value = 30m },
+            new() { MetricName = "Debt", FiscalYear = 2024, Value = 25m },
+            new() { MetricName = "Liabilities", FiscalYear = 2023, Value = 50m },
+            new() { MetricName = "Liabilities", FiscalYear = 2024, Value = 56m }
+        };
+
+        var direction = service.BuildDirection(facts);
+
+        Assert.Contains(direction.Metrics, metric =>
+            metric.MetricName == "Revenue" &&
+            metric.DirectionLabel == "Improving");
+        Assert.Contains(direction.Metrics, metric =>
+            metric.MetricName == "NetIncome" &&
+            metric.DirectionLabel == "Weakening");
+        Assert.Contains(direction.Metrics, metric =>
+            metric.MetricName == "Debt" &&
+            metric.DirectionLabel == "Lower Risk");
+        Assert.Contains(direction.Metrics, metric =>
+            metric.MetricName == "Liabilities" &&
+            metric.DirectionLabel == "Higher Risk");
+    }
+
+    [Fact]
     public void Normalize_AllowsCommonShareClassTickerFormat()
     {
         Assert.Equal("BRK-B", TickerNormalizer.Normalize("brk.b"));

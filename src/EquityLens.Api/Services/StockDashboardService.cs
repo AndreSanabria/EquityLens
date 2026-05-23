@@ -79,6 +79,16 @@ public class StockDashboardService(
 
     private IReadOnlyList<string> BuildLimitations()
     {
+        if (researchDataProvider.ProviderName.Contains("Alpha Vantage", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+            [
+                "Price history and news use Alpha Vantage when ApiProviderOptions:MarketDataProvider is set to AlphaVantage.",
+                "Financial facts and filings come from SEC EDGAR and can lag company events.",
+                "Market data availability depends on the configured Alpha Vantage API plan and rate limits."
+            ];
+        }
+
         if (researchDataProvider.ProviderName.StartsWith("Live:", StringComparison.OrdinalIgnoreCase))
         {
             return

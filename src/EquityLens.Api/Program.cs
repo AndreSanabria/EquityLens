@@ -4,6 +4,7 @@ using EquityLens.Api.Services;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Data;
 using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -63,7 +64,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<EquityLensDbContext>();
-    dbContext.Database.EnsureCreated();
+    ApplyDatabaseMigrations(dbContext);
 }
 
 app.UseExceptionHandler("/error");
@@ -109,5 +110,66 @@ app.Map("/error", (HttpContext context) =>
 app.MapControllers();
 
 app.Run();
+
+static void ApplyDatabaseMigrations(EquityLensDbContext dbContext)
+{
+    BaselineLegacySqliteDatabase(dbContext);
+    dbContext.Database.Migrate();
+}
+
+static void BaselineLegacySqliteDatabase(EquityLensDbContext dbContext)
+{
+    var connection = dbContext.Database.GetDbConnection();
+    var shouldCloseConnection = connection.State != ConnectionState.Open;
+
+    if (shouldCloseConnection)
+    {
+        connection.Open();
+    }
+
+    try
+    {
+        var hasAppTables =
+            TableExists("WatchlistItems") ||
+            TableExists("ResearchSnapshots") ||
+            TableExists("ApiRequestLogs");
+
+        if (!hasAppTables || TableExists("__EFMigrationsHistory"))
+        {
+            return;
+        }
+
+        dbContext.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                "ProductVersion" TEXT NOT NULL
+            );
+            """);
+
+        dbContext.Database.ExecuteSqlRaw("""
+            INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+            VALUES ('20260523210000_InitialCreate', '8.0.10');
+            """);
+    }
+    finally
+    {
+        if (shouldCloseConnection)
+        {
+            connection.Close();
+        }
+    }
+
+    bool TableExists(string tableName)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "$tableName";
+        parameter.Value = tableName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(command.ExecuteScalar()) > 0;
+    }
+}
 
 public partial class Program;

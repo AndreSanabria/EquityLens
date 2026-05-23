@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent } from 'react'
 import {
   AlertTriangle,
   BarChart3,
-  BookmarkPlus,
   CalendarClock,
   ExternalLink,
   FileText,
   Info,
   Newspaper,
   RefreshCw,
-  Save,
   Search,
   ShieldAlert,
   Star,
@@ -34,8 +32,22 @@ import {
   formatDate,
   formatPercent,
 } from './format.ts'
+import {
+  chartRanges,
+  DEFAULT_TICKER,
+  riskComponents,
+  termDefinitions,
+  type ChartRangeKey,
+} from './dashboardConfig.ts'
+import {
+  DashboardHeader,
+  FinancialTable,
+  FreshnessItem,
+  InfoTooltip,
+  MetricTile,
+  PriceChart,
+} from './dashboardComponents.tsx'
 import type {
-  FinancialMetricDirection,
   Methodology,
   PricePoint,
   RiskComponentDetail,
@@ -44,97 +56,6 @@ import type {
   WatchlistItem,
 } from './types.ts'
 import './App.css'
-
-const DEFAULT_TICKER = 'MSFT'
-
-type ChartRangeKey = '1D' | '3D' | '1W' | '2W' | '4W' | '3M' | '6M' | '1Y' | '5Y'
-
-const chartRanges: Array<{
-  key: ChartRangeKey
-  label: string
-  description: string
-  days?: number
-  months?: number
-  years?: number
-  sessions?: number
-}> = [
-  { key: '1D', label: '1D', sessions: 2, description: 'Last two available trading closes.' },
-  { key: '3D', label: '3D', sessions: 4, description: 'Last four available trading closes.' },
-  { key: '1W', label: '1W', days: 7, description: 'Price history from the last calendar week.' },
-  { key: '2W', label: '2W', days: 14, description: 'Price history from the last two calendar weeks.' },
-  { key: '4W', label: '4W', days: 28, description: 'Price history from the last four calendar weeks.' },
-  { key: '3M', label: '3M', months: 3, description: 'Price history from the last three months.' },
-  { key: '6M', label: '6M', months: 6, description: 'Price history from the last six months.' },
-  { key: '1Y', label: '1Y', years: 1, description: 'Price history from the last year.' },
-  { key: '5Y', label: '5Y', years: 5, description: 'All five years of available price history.' },
-]
-
-const riskComponents = [
-  {
-    label: 'Volatility',
-    key: 'volatilityScore',
-    weight: '30%',
-    description: 'Measures how much the stock price has moved day to day. Higher annualized volatility creates a higher risk score.',
-  },
-  {
-    label: 'Max drawdown',
-    key: 'maxDrawdownScore',
-    weight: '25%',
-    description: 'Measures the worst drop from a previous high. A deeper past decline means the stock has shown larger downside risk.',
-  },
-  {
-    label: 'Revenue instability',
-    key: 'revenueInstabilityScore',
-    weight: '15%',
-    description: 'Looks at annual revenue changes. Falling or inconsistent revenue raises the score.',
-  },
-  {
-    label: 'Earnings instability',
-    key: 'earningsInstabilityScore',
-    weight: '15%',
-    description: 'Looks at annual net income changes. Profit declines or sharp swings raise the score.',
-  },
-  {
-    label: 'Debt pressure',
-    key: 'debtPressureScore',
-    weight: '10%',
-    description: 'Uses debt, cash, and liability growth. More debt relative to cash or rising liabilities raises the score.',
-  },
-  {
-    label: 'News risk',
-    key: 'newsRiskScore',
-    weight: '5%',
-    description: 'Scores recent headlines by category, recency, and source quality. Legal, debt, and layoff headlines carry more risk weight.',
-  },
-] as const
-
-const termDefinitions: Record<string, string> = {
-  'Current price': 'The latest closing price in the available data set.',
-  '52-week high': 'The highest price reached during the most recent year of available data.',
-  '52-week low': 'The lowest price reached during the most recent year of available data.',
-  'Market cap': 'Market capitalization: estimated company value based on share price and shares outstanding.',
-  'Price History': 'Historical closing prices used to show how the stock moved over the selected time range.',
-  Returns: 'Percentage change from a past price to the latest available price.',
-  'Annual volatility': 'Daily return volatility converted to a yearly estimate using 252 trading days.',
-  'Max drawdown': 'The largest decline from a previous high to a later low in the available price series.',
-  'Risk Breakdown': 'A transparent risk estimate based on price movement, financial stability, debt pressure, and headline risk.',
-  'Financial Direction': 'A year-over-year comparison of financial metrics such as revenue, net income, cash, debt, assets, and liabilities.',
-  'Relevant News': 'Headlines ranked by category, recency, and source quality.',
-  'SEC Filings': 'Official filings submitted to the U.S. Securities and Exchange Commission.',
-  'Research Snapshots': 'Saved copies of the dashboard result so the same company can be compared over time.',
-  'Data Freshness': 'Shows which live data sources were used and how current each major dashboard section is.',
-  CIK: 'Central Index Key: the SEC identifier used to find company filings.',
-  'Relevance score': 'A 0-100 score based on headline keywords, recency, and source quality.',
-  '10-Q': 'Quarterly SEC report covering recent financial performance and business updates.',
-  '10-K': 'Annual SEC report covering full-year results, business risks, and company details.',
-  '8-K': 'Current SEC report used for important company events.',
-  Assets: 'Resources the company owns or controls.',
-  Cash: 'Cash and cash-like resources available to the company.',
-  Debt: 'Borrowed money or debt-like obligations.',
-  Liabilities: 'Company obligations, including debts and other amounts owed.',
-  'Net Income': 'Profit after expenses, taxes, and other costs.',
-  Revenue: 'Sales or operating income before expenses.',
-}
 
 function App() {
   const initialTicker = readInitialTicker()
@@ -643,193 +564,6 @@ function App() {
   )
 }
 
-function DashboardHeader({
-  dashboard,
-  isSaving,
-  notes,
-  onCreateSnapshot,
-  onNotesChange,
-  onSaveWatchlist,
-  watchlistHasTicker,
-}: {
-  dashboard: StockDashboard
-  isSaving: boolean
-  notes: string
-  onCreateSnapshot: () => void
-  onNotesChange: (value: string) => void
-  onSaveWatchlist: () => void
-  watchlistHasTicker: boolean
-}) {
-  return (
-    <header className="dashboard-header">
-      <div>
-        <span className="eyebrow">{dashboard.companyProfile.exchange}</span>
-        <h1>
-          {dashboard.companyProfile.ticker}
-          <span>{dashboard.companyProfile.companyName}</span>
-        </h1>
-        <p>
-          {dashboard.companyProfile.sector} - {dashboard.companyProfile.industry} - CIK {dashboard.companyProfile.cik}
-          <InfoTooltip text={termDefinitions.CIK} />
-        </p>
-      </div>
-      <div className="action-panel">
-        <input
-          aria-label="Watchlist notes"
-          onChange={(event) => onNotesChange(event.target.value)}
-          placeholder="Watchlist note"
-          value={notes}
-        />
-        <button disabled={isSaving} onClick={onSaveWatchlist} type="button">
-          <BookmarkPlus size={17} />
-          {watchlistHasTicker ? 'Update' : 'Watch'}
-        </button>
-        <button disabled={isSaving} onClick={onCreateSnapshot} type="button">
-          <Save size={17} />
-          Snapshot
-        </button>
-      </div>
-    </header>
-  )
-}
-
-function MetricTile({
-  icon,
-  label,
-  info,
-  value,
-}: {
-  icon: ReactNode
-  label: string
-  info?: string
-  value: string
-}) {
-  return (
-    <div className="metric-tile">
-      {icon}
-      <span>
-        {label}
-        {info ? <InfoTooltip text={info} /> : null}
-      </span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function InfoTooltip({ text }: { text: string }) {
-  return (
-    <span className="info-tooltip">
-      <button aria-label={text} type="button">
-        <Info size={13} />
-      </button>
-      <span role="tooltip">{text}</span>
-    </span>
-  )
-}
-
-function FreshnessItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="freshness-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function FinancialTable({ metrics }: { metrics: FinancialMetricDirection[] }) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Metric</th>
-            <th>Previous</th>
-            <th>Current</th>
-            <th>Direction</th>
-          </tr>
-        </thead>
-        <tbody>
-          {metrics.map((metric) => (
-            <tr key={metric.metricName}>
-              <td>
-                {splitMetric(metric.metricName)}
-                <InfoTooltip text={termDefinitions[splitMetric(metric.metricName)] ?? 'Financial metric used in the year-over-year direction check.'} />
-              </td>
-              <td>{compactNumber.format(metric.previousValue)}</td>
-              <td>{compactNumber.format(metric.currentValue)}</td>
-              <td>
-                <span className={`direction-pill ${directionClass(metric.directionLabel)}`}>
-                  {metric.directionLabel}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function PriceChart({ points }: { points: PricePoint[] }) {
-  if (points.length === 0) {
-    return <div className="empty-chart">No price data</div>
-  }
-
-  const width = 900
-  const height = 320
-  const padding = { top: 18, right: 22, bottom: 36, left: 58 }
-  const closes = points.map((point) => point.close)
-  const min = Math.min(...closes)
-  const max = Math.max(...closes)
-  const range = Math.max(max - min, 1)
-
-  const getX = (index: number) =>
-    padding.left + (index / Math.max(points.length - 1, 1)) * (width - padding.left - padding.right)
-  const getY = (close: number) =>
-    padding.top + ((max - close) / range) * (height - padding.top - padding.bottom)
-
-  const linePath = points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${getX(index).toFixed(2)} ${getY(point.close).toFixed(2)}`)
-    .join(' ')
-  const areaPath = `${linePath} L ${getX(points.length - 1).toFixed(2)} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`
-  const first = points[0]
-  const last = points[points.length - 1]
-  const midIndex = Math.floor(points.length / 2)
-  const ticks = [first, points[midIndex], last]
-
-  return (
-    <svg className="price-chart" role="img" viewBox={`0 0 ${width} ${height}`} aria-label="Historical close price chart">
-      <defs>
-        <linearGradient id="nativePriceFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#2b7a63" stopOpacity="0.32" />
-          <stop offset="100%" stopColor="#2b7a63" stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      {[0, 1, 2, 3].map((line) => {
-        const y = padding.top + (line / 3) * (height - padding.top - padding.bottom)
-        return <line className="chart-grid" key={line} x1={padding.left} x2={width - padding.right} y1={y} y2={y} />
-      })}
-      <text className="chart-axis" x={8} y={padding.top + 5}>
-        {currency.format(max)}
-      </text>
-      <text className="chart-axis" x={8} y={height - padding.bottom}>
-        {currency.format(min)}
-      </text>
-      {ticks.map((point, index) => (
-        <text className="chart-axis date" key={`${point.date}-${index}`} x={getX(index === 0 ? 0 : index === 1 ? midIndex : points.length - 1)} y={height - 10}>
-          {formatDate(point.date)}
-        </text>
-      ))}
-      <path className="chart-area" d={areaPath} />
-      <path className="chart-line" d={linePath} />
-      <circle className="chart-last-point" cx={getX(points.length - 1)} cy={getY(last.close)} r="5" />
-      <text className="chart-last-label" x={getX(points.length - 1) - 86} y={getY(last.close) - 10}>
-        {currency.format(last.close)}
-      </text>
-    </svg>
-  )
-}
-
 function compressChartPoints(points: PricePoint[]) {
   if (points.length <= 320) {
     return points
@@ -872,10 +606,6 @@ function filterChartPoints(points: PricePoint[], rangeKey: ChartRangeKey) {
   return points.filter((point) => new Date(point.date) >= startDate)
 }
 
-function splitMetric(metricName: string) {
-  return metricName.replace(/([a-z])([A-Z])/g, '$1 $2')
-}
-
 function formatMarketCap(value: number) {
   return value > 0 ? compactNumber.format(value) : 'N/A'
 }
@@ -910,18 +640,6 @@ function riskClass(score: number) {
   }
 
   return 'very-high'
-}
-
-function directionClass(label: string) {
-  if (label === 'Improving' || label === 'Lower Risk') {
-    return 'good'
-  }
-
-  if (label === 'Weakening' || label === 'Higher Risk') {
-    return 'caution'
-  }
-
-  return 'neutral'
 }
 
 function getErrorMessage(error: unknown) {

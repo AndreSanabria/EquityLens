@@ -6,7 +6,11 @@ public class ApiProviderOptions
 
     public string Mode { get; set; } = "Live";
 
-    public string SecUserAgent { get; set; } = "EquityLens Portfolio App contact@example.com";
+    public string MarketDataProvider { get; set; } = "YahooFinance";
+
+    public string AlphaVantageApiKey { get; set; } = string.Empty;
+
+    public string SecUserAgent { get; set; } = "EquityLens Research Dashboard contact@example.com";
 
     public List<string> SupportedTickers { get; set; } = new();
 }

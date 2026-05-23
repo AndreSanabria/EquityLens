@@ -15,17 +15,29 @@ public class LiveResearchDataProvider(
     IOptions<ApiProviderOptions> options,
     IApiRequestLogService apiRequestLogService) : IResearchDataProvider
 {
-    private const string ProviderNameValue = "Live: Yahoo Finance chart/RSS + SEC EDGAR";
     private const string MarketUserAgent = "EquityLens/1.0 research-dashboard";
+    private const string YahooFinanceProviderName = "Yahoo Finance chart/RSS";
+    private const string AlphaVantageProviderName = "Alpha Vantage";
 
     private readonly HashSet<string> _supportedTickers = new(
         (options.Value.SupportedTickers.Count == 0 ? ["AAPL", "MSFT", "NVDA", "TSLA", "GOOG", "AMZN"] : options.Value.SupportedTickers)
             .Select(TickerNormalizer.Normalize),
         StringComparer.OrdinalIgnoreCase);
 
+    private readonly string _marketDataProvider = string.IsNullOrWhiteSpace(options.Value.MarketDataProvider)
+        ? "YahooFinance"
+        : options.Value.MarketDataProvider.Trim();
+    private readonly string _alphaVantageApiKey = options.Value.AlphaVantageApiKey.Trim();
     private readonly string _secUserAgent = options.Value.SecUserAgent;
 
-    public string ProviderName => ProviderNameValue;
+    public string ProviderName => $"Live: {MarketDataProviderLabel} + SEC EDGAR";
+
+    private bool UseAlphaVantage =>
+        _marketDataProvider.Equals("AlphaVantage", StringComparison.OrdinalIgnoreCase);
+
+    private string MarketDataProviderLabel => UseAlphaVantage
+        ? AlphaVantageProviderName
+        : YahooFinanceProviderName;
 
     public IReadOnlyList<string> GetSupportedTickers() =>
         _supportedTickers.OrderBy(ticker => ticker).ToArray();
@@ -64,7 +76,9 @@ public class LiveResearchDataProvider(
     {
         var normalized = TickerNormalizer.Normalize(ticker);
 
-        if (cache.TryGetValue<IReadOnlyList<HistoricalPrice>>($"prices:{normalized}", out var cachedPrices) &&
+        var cacheKey = $"prices:{MarketDataProviderLabel}:{normalized}";
+
+        if (cache.TryGetValue<IReadOnlyList<HistoricalPrice>>(cacheKey, out var cachedPrices) &&
             cachedPrices is not null)
         {
             return cachedPrices;
@@ -72,22 +86,27 @@ public class LiveResearchDataProvider(
 
         try
         {
-            var uri = $"https://query1.finance.yahoo.com/v8/finance/chart/{normalized}?range=5y&interval=1d";
-            using var request = CreateMarketRequest(uri);
+            var endpointName = UseAlphaVantage ? "alphavantage-daily-adjusted" : "yahoo-chart";
+            using var request = UseAlphaVantage
+                ? CreateAlphaVantageRequest($"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={Uri.EscapeDataString(normalized)}&outputsize=full&apikey={Uri.EscapeDataString(GetAlphaVantageApiKey())}")
+                : CreateMarketRequest($"https://query1.finance.yahoo.com/v8/finance/chart/{normalized}?range=5y&interval=1d");
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var prices = ParseYahooPrices(normalized, content);
+            var prices = UseAlphaVantage
+                ? ParseAlphaVantagePrices(normalized, content)
+                : ParseYahooPrices(normalized, content);
 
-            await apiRequestLogService.LogAsync(ProviderNameValue, "yahoo-chart", normalized, (int)response.StatusCode, true, null, cancellationToken);
-            cache.Set($"prices:{normalized}", prices, TimeSpan.FromMinutes(20));
+            await apiRequestLogService.LogAsync(ProviderName, endpointName, normalized, (int)response.StatusCode, true, null, cancellationToken);
+            cache.Set(cacheKey, prices, TimeSpan.FromMinutes(20));
 
             return prices;
         }
         catch (Exception ex)
         {
-            await apiRequestLogService.LogAsync(ProviderNameValue, "yahoo-chart", normalized, 500, false, ex.Message, cancellationToken);
+            var endpointName = UseAlphaVantage ? "alphavantage-daily-adjusted" : "yahoo-chart";
+            await apiRequestLogService.LogAsync(ProviderName, endpointName, normalized, 500, false, ex.Message, cancellationToken);
             throw;
         }
     }
@@ -113,14 +132,14 @@ public class LiveResearchDataProvider(
             using var document = JsonDocument.Parse(content);
             var facts = ParseCompanyFacts(normalized, document.RootElement);
 
-            await apiRequestLogService.LogAsync(ProviderNameValue, "sec-companyfacts", normalized, (int)response.StatusCode, true, null, cancellationToken);
+            await apiRequestLogService.LogAsync(ProviderName, "sec-companyfacts", normalized, (int)response.StatusCode, true, null, cancellationToken);
             cache.Set($"facts:{company.CikPadded}", facts, TimeSpan.FromHours(12));
 
             return facts;
         }
         catch (Exception ex)
         {
-            await apiRequestLogService.LogAsync(ProviderNameValue, "sec-companyfacts", normalized, 500, false, ex.Message, cancellationToken);
+            await apiRequestLogService.LogAsync(ProviderName, "sec-companyfacts", normalized, 500, false, ex.Message, cancellationToken);
             throw;
         }
     }
@@ -129,7 +148,9 @@ public class LiveResearchDataProvider(
     {
         var normalized = TickerNormalizer.Normalize(ticker);
 
-        if (cache.TryGetValue<IReadOnlyList<NewsArticle>>($"news:{normalized}", out var cachedNews) &&
+        var cacheKey = $"news:{MarketDataProviderLabel}:{normalized}";
+
+        if (cache.TryGetValue<IReadOnlyList<NewsArticle>>(cacheKey, out var cachedNews) &&
             cachedNews is not null)
         {
             return cachedNews;
@@ -137,22 +158,27 @@ public class LiveResearchDataProvider(
 
         try
         {
-            var uri = $"https://feeds.finance.yahoo.com/rss/2.0/headline?s={normalized}&region=US&lang=en-US";
-            using var request = CreateMarketRequest(uri);
+            var endpointName = UseAlphaVantage ? "alphavantage-news-sentiment" : "yahoo-rss-news";
+            using var request = UseAlphaVantage
+                ? CreateAlphaVantageRequest($"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={Uri.EscapeDataString(normalized)}&limit=20&apikey={Uri.EscapeDataString(GetAlphaVantageApiKey())}")
+                : CreateMarketRequest($"https://feeds.finance.yahoo.com/rss/2.0/headline?s={normalized}&region=US&lang=en-US");
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var news = ParseYahooNews(normalized, content);
+            var news = UseAlphaVantage
+                ? ParseAlphaVantageNews(normalized, content)
+                : ParseYahooNews(normalized, content);
 
-            await apiRequestLogService.LogAsync(ProviderNameValue, "yahoo-rss-news", normalized, (int)response.StatusCode, true, null, cancellationToken);
-            cache.Set($"news:{normalized}", news, TimeSpan.FromMinutes(20));
+            await apiRequestLogService.LogAsync(ProviderName, endpointName, normalized, (int)response.StatusCode, true, null, cancellationToken);
+            cache.Set(cacheKey, news, TimeSpan.FromMinutes(20));
 
             return news;
         }
         catch (Exception ex)
         {
-            await apiRequestLogService.LogAsync(ProviderNameValue, "yahoo-rss-news", normalized, 500, false, ex.Message, cancellationToken);
+            var endpointName = UseAlphaVantage ? "alphavantage-news-sentiment" : "yahoo-rss-news";
+            await apiRequestLogService.LogAsync(ProviderName, endpointName, normalized, 500, false, ex.Message, cancellationToken);
             throw;
         }
     }
@@ -213,7 +239,7 @@ public class LiveResearchDataProvider(
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             response.EnsureSuccessStatusCode();
-            await apiRequestLogService.LogAsync(ProviderNameValue, "sec-company-tickers", normalized, (int)response.StatusCode, true, null, cancellationToken);
+            await apiRequestLogService.LogAsync(ProviderName, "sec-company-tickers", normalized, (int)response.StatusCode, true, null, cancellationToken);
 
             using var document = JsonDocument.Parse(content);
             var results = new Dictionary<string, CompanyTicker>(StringComparer.OrdinalIgnoreCase);
@@ -262,6 +288,24 @@ public class LiveResearchDataProvider(
     {
         var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.TryAddWithoutValidation("User-Agent", _secUserAgent);
+
+        return request;
+    }
+
+    private string GetAlphaVantageApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(_alphaVantageApiKey))
+        {
+            throw new InvalidOperationException("Alpha Vantage market data requires ApiProviderOptions:AlphaVantageApiKey.");
+        }
+
+        return _alphaVantageApiKey;
+    }
+
+    private static HttpRequestMessage CreateAlphaVantageRequest(string uri)
+    {
+        var request = CreateMarketRequest(uri);
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
 
         return request;
     }
@@ -316,6 +360,56 @@ public class LiveResearchDataProvider(
         if (prices.Count < 2)
         {
             throw new InvalidOperationException($"Not enough price history was returned for {ticker}.");
+        }
+
+        return prices.OrderBy(price => price.Date).ToList();
+    }
+
+    private static IReadOnlyList<HistoricalPrice> ParseAlphaVantagePrices(string ticker, string content)
+    {
+        using var document = JsonDocument.Parse(content);
+        ThrowIfAlphaVantageError(document.RootElement);
+
+        if (!document.RootElement.TryGetProperty("Time Series (Daily)", out var timeSeries))
+        {
+            throw new InvalidOperationException($"Alpha Vantage did not return daily price history for {ticker}.");
+        }
+
+        var startDate = DateTime.UtcNow.Date.AddYears(-5);
+        var prices = new List<HistoricalPrice>();
+
+        foreach (var property in timeSeries.EnumerateObject())
+        {
+            if (!DateTime.TryParse(property.Name, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date) ||
+                date.Date < startDate)
+            {
+                continue;
+            }
+
+            var item = property.Value;
+            var close = GetDecimalString(item, "4. close");
+
+            prices.Add(new HistoricalPrice
+            {
+                Ticker = ticker,
+                Date = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc),
+                Open = GetDecimalString(item, "1. open"),
+                High = GetDecimalString(item, "2. high"),
+                Low = GetDecimalString(item, "3. low"),
+                Close = close,
+                AdjustedClose = item.TryGetProperty("5. adjusted close", out var adjustedClose)
+                    ? GetDecimalString(adjustedClose)
+                    : close,
+                Volume = item.TryGetProperty("6. volume", out var volume) &&
+                    long.TryParse(volume.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedVolume)
+                        ? parsedVolume
+                        : 0
+            });
+        }
+
+        if (prices.Count < 2)
+        {
+            throw new InvalidOperationException($"Not enough Alpha Vantage price history was returned for {ticker}.");
         }
 
         return prices.OrderBy(price => price.Date).ToList();
@@ -423,6 +517,37 @@ public class LiveResearchDataProvider(
             .ToList();
     }
 
+    private static IReadOnlyList<NewsArticle> ParseAlphaVantageNews(string ticker, string content)
+    {
+        using var document = JsonDocument.Parse(content);
+        ThrowIfAlphaVantageError(document.RootElement);
+
+        if (!document.RootElement.TryGetProperty("feed", out var feed) ||
+            feed.ValueKind is not JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return feed
+            .EnumerateArray()
+            .Select((item, index) => new NewsArticle
+            {
+                Id = index + 1,
+                Ticker = ticker,
+                Title = item.TryGetProperty("title", out var title) ? title.GetString() ?? "Untitled article" : "Untitled article",
+                Source = item.TryGetProperty("source", out var source) ? source.GetString() ?? "Alpha Vantage" : "Alpha Vantage",
+                Url = item.TryGetProperty("url", out var url) ? url.GetString() ?? string.Empty : string.Empty,
+                IsDirectArticleUrl = true,
+                PublishedAt = item.TryGetProperty("time_published", out var published)
+                    ? ParseAlphaVantageTimestamp(published.GetString())
+                    : DateTime.UtcNow,
+                Category = "General"
+            })
+            .Where(article => !string.IsNullOrWhiteSpace(article.Url))
+            .Take(20)
+            .ToList();
+    }
+
     private static string BuildNewsSource(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
@@ -454,6 +579,38 @@ public class LiveResearchDataProvider(
         element.TryGetDecimal(out var value)
             ? decimal.Round(value, 4)
             : decimal.Round((decimal)element.GetDouble(), 4);
+
+    private static decimal GetDecimalString(JsonElement item, string propertyName) =>
+        item.TryGetProperty(propertyName, out var property)
+            ? GetDecimalString(property)
+            : 0m;
+
+    private static decimal GetDecimalString(JsonElement element) =>
+        decimal.TryParse(element.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? decimal.Round(value, 4)
+            : 0m;
+
+    private static DateTime ParseAlphaVantageTimestamp(string? value) =>
+        DateTime.TryParseExact(
+            value,
+            "yyyyMMdd'T'HHmmss",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var parsed)
+            ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc)
+            : DateTime.UtcNow;
+
+    private static void ThrowIfAlphaVantageError(JsonElement root)
+    {
+        foreach (var propertyName in new[] { "Error Message", "Note", "Information" })
+        {
+            if (root.TryGetProperty(propertyName, out var message) &&
+                !string.IsNullOrWhiteSpace(message.GetString()))
+            {
+                throw new HttpRequestException(message.GetString());
+            }
+        }
+    }
 
     private static readonly IReadOnlyDictionary<string, CompanyProfileEnrichment> CompanyEnrichment =
         new Dictionary<string, CompanyProfileEnrichment>(StringComparer.OrdinalIgnoreCase)

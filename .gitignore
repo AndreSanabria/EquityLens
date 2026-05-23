@@ -12,6 +12,7 @@ coverage/
 *.db-wal
 *.db-shm
 *.log
+.logs/
 .env
 .env.*
 src/EquityLens.Web/node_modules/
