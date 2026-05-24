@@ -593,9 +593,12 @@ button:disabled {
   background: linear-gradient(
     90deg,
     #2b7a63 0%,
-    #2b7a63 25%,
+    #2b7a63 22%,
+    #e0b43f 34%,
     #e0b43f 50%,
-    #cf4b3f 75%,
+    #cf4b3f 62%,
+    #cf4b3f 76%,
+    #9f241c 88%,
     #9f241c 100%
   );
   border-radius: 999px;
@@ -631,9 +634,12 @@ button:disabled {
   background: linear-gradient(
     90deg,
     #2b7a63 0%,
-    #2b7a63 25%,
+    #2b7a63 22%,
+    #e0b43f 34%,
     #e0b43f 50%,
-    #cf4b3f 75%,
+    #cf4b3f 62%,
+    #cf4b3f 76%,
+    #9f241c 88%,
     #9f241c 100%
   );
   border-radius: 999px;
